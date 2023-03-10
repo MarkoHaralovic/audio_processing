@@ -1,0 +1,140 @@
+
+Possible optimizations:
+
+->treshold in envelope function
+->input shape of the tensor sent to get_conv_model
+->number of MFCC's defined in predictions.py header
+->N_CLASSES -> could be more, depending on class classification (two or more instruments -> new class)
+->batch_size in model.fit() function call
+-># Resize Mel spectrogram to expected shape
+            mfccs = np.resize(
+                mfccs, (int(DURATION * SAMPLE_RATE / 128), NUM_MFCC, 1)) -> this method is liability, we could try transforming 
+                this function -> it determines inout shape of the tensor sent to get_conv_model
+
+
+
+
+
+
+******************CODE TO DO ****************************
+
+PREREQUISITES:
+-expanded dataset
+-audio preprocessing
+
+1.  downsampling sr to 2200 Hz
+(try 22000 afterwards)
+
+2. resample the audio ( assuming FFT -> moving from freq to time domain)
+
+3. split the audio using a one-second window (defining envelope function for noise detection/removal ) 
+
+4. generate mel spectogram (possibly waveform -)
+
+5. send that data to the model (try both models)
+
+
+-------------------------------------
+FRAME_SIZE = 1024
+HOP_LENGTH = 512
+
+#calculating the amplitude envelope
+def amplitude_envelope(signal, frame_size, hop_length):
+  amplitude_envelope = []
+
+  #calculate amplitude_envelope for each frame
+  for i in range(0,len(signal), hop_length):
+    current_frame_amplitude_envelope = max(signal[i:i+frame_size])
+    amplitude_envelope.append(current_frame_amplitude_envelope)
+
+  return np.array(amplitude_envelope)
+
+def fancy_amplitude_envelope(signal, frame_size, hop_length):
+  return np.array([max(signal[i:i+frame_size]) for i in range(0,signal.size,hop_length)])
+
+
+
+----------------------------------------
+def get_conv_model(N_CLASSES=11, SR=16000, DT=1.0):
+    input_shape = (int(SRDT), 1)
+    model = Sequential()
+
+    # Step IV: Generate Mel Spectrogram
+    model.add(get_melspectrogram_layer(input_shape=input_shape,
+                                       n_mels=128,
+                                       pad_end=True,
+                                       n_fft=512,
+                                       win_length=400,
+                                       hop_length=160,
+                                       sample_rate=SR,
+                                       return_decibel=True,
+                                       input_data_format='channels_last',
+                                       output_data_format='channels_last'))
+
+    # Step V: Add Convolutional Layers
+    num_filters = 32
+    while num_filters != 512:
+        model.add(Conv2D(num_filters, kernel_size=(3, 3), activation='relu', padding='same'))
+        model.add(MaxPooling2D(pool_size=(3, 3)))
+        model.add(Dropout(0.25))
+        num_filters= 2
+
+    # Step VI: Add Flatten Layer
+    model.add(Flatten())
+
+    # Step VII: Add Fully Connected Layer
+    model.add(Dense(512, activation='relu', activity_regularizer=l2(0.001)))
+    model.add(Dropout(0.5))
+
+    # Step IX: Use Softmax function for calculation of the posterior probability
+    model.add(Dense(N_CLASSES, activation='softmax'))
+
+    # Compile the model
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    return model
+
+
+
+---------------------------------------------------
+def get_conv_model():
+    model = Sequential()
+    model.add(Conv2D(32, (3, 3), activation='relu', input_shape=input_shape))
+    model.add(MaxPooling2D((3, 3)))
+    model.add(Dropout(0.25))
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((3, 3)))
+    model.add(Dropout(0.25))
+    model.add(Conv2D(128, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((3, 3)))
+    model.add(Dropout(0.25))
+    model.add(Conv2D(256, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((3, 3)))
+    model.add(Dropout(0.25))
+    model.add(Flatten())
+    model.add(Dense(512, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(len(classes), activation='softmax'))
+    model.summary()
+    model.compile(loss='categorical_crossentropy',
+                  optimizer='adam',
+                  metrics=['accuracy'])
+    return model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
